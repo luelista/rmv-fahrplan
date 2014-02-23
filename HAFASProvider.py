@@ -1,5 +1,4 @@
 #!/usr/bin/python3
-import pprint
 import urllib.request
 import urllib.parse
 import time
@@ -11,7 +10,6 @@ from lxml import etree
 class HAFASProvider:
     stboard_uri = "https://www.rmv.de/auskunft/bin/jp/stboard.exe/"
     stboard_dtd = "http://www.rmv.de/xml/hafasXMLStationBoard.dtd"  # unused, HTTPS => 503
-    #stboard_uri = "http://nah.sh.hafas.de/bin/stboard.exe/"
     stboard_params = {}
     stboard_headers = {}
 
@@ -23,10 +21,6 @@ class HAFASProvider:
     tz = 'CET'  # interprate time with this timezone
 
     def __init__(self):
-        # stboard.exe can be called with one of (dn | dl | dox)
-        # for RMV this makes no difference at all, while it should
-        # supposedly add support for normal, text-only and mobile output
-
         # request params defaults
         #self.stboard_params['L'] = 'vs_rmv.vs_sq'  # Layout (affects web form output)
         #self.stboard_params['L'] = 'vs_java3' # seems to be a generic layout available in every installation
@@ -37,7 +31,7 @@ class HAFASProvider:
         self.stboard_params['maxJourneys'] = '50'  # Maximal number of results
         self.stboard_params['boardType'] = 'dep'  # Departure / Arrival
         self.stboard_params['productsFilter'] = '11111111111'  # Means of Transport (skip or 11111111111 for all)
-        self.stboard_params['maxStops'] = 1  # UNK
+        self.stboard_params['maxStops'] = 10  # UNK
         self.stboard_params['rt'] = 1  # Enable Realtime-Data
         self.stboard_params['start'] = 'yes'  # Start Query or Webform
         # UNUSED / UNTESTED AT THIS POINT
@@ -46,7 +40,7 @@ class HAFASProvider:
         self.stboard_params['output'] = 'xml'  # Output Format (auto fallback to some html website)
 
         # http headers to send with each request
-        self.stboard_headers['Host'] = 'nah.sh.hafas.de'
+        self.stboard_headers['Host'] = 'www.rmv.de'
         self.stboard_headers['User-Agent'] = 'Mozilla/5.0 (X11; Linux x86_64; rv:27.0) Gecko/20100101 Firefox/27.0'
 
     @staticmethod
@@ -66,10 +60,10 @@ class HAFASProvider:
 
     @staticmethod
     def __handle_departure_or_arrival(leaf, start_date, start_time):
-        # depending on the stboard type we either have an arrival or depature tag
-        # we can handle both the same way
+        # Note: MainStop/BasicStop will either be arrival or depature, every other PassList/BasicStop will be arrival
         timestamp = 0  # assume zero delay if delay attribute is missing
         delay = 0
+        platform = -1
         for time_attr in list(leaf):
             if time_attr.tag == 'Time':
                 # time is formatted as HH:MM
@@ -83,10 +77,13 @@ class HAFASProvider:
             elif time_attr.tag == 'Delay':
                 # convert delay to seconds, for easier calculations with unix timestamps
                 delay = 60 * int(time_attr.text)
+            elif time_attr.tag == 'Platform':
+                # platform where the connection departs from ... strangely enough this resides under time.
+                platform = time_attr.text
             else:
                 print('Unhandled time attribute ({tag} found.'.format(tag=time_attr.tag))
 
-        return timestamp, delay
+        return timestamp, delay, platform
 
     @staticmethod
     def __handle_basic_stop(leaf, start_date, start_time):
@@ -111,7 +108,7 @@ class HAFASProvider:
                     stop['location'] = location
 
             elif attr.tag == 'Dep' or attr.tag == 'Arr':
-                stop['time'], stop['delay'] = HAFASProvider.__handle_departure_or_arrival(attr, start_date, start_time)
+                stop['time'], stop['delay'], stop['platform'] = HAFASProvider.__handle_departure_or_arrival(attr, start_date, start_time)
 
             else:
                 print('Unhandled BasicStop child ({tag}) found.'.format(tag=attr.tag))
@@ -234,10 +231,3 @@ class HAFASProvider:
     def __add_http_headers(self, request):
         for header, value in self.stboard_headers.items():
             request.add_header(header, value)
-
-pp = pprint.PrettyPrinter(indent=4)
-
-rmv = HAFASProvider()
-res = rmv.get_stboard("Darmstadt Hauptbahnhof", 'actual', 'yes', 5)
-pp.pprint(res)
-
