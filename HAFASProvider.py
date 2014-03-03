@@ -8,40 +8,40 @@ from lxml import etree
 
 
 class HAFASProvider:
-    stboard_uri = "https://www.rmv.de/auskunft/bin/jp/stboard.exe/"
-    stboard_dtd = "http://www.rmv.de/xml/hafasXMLStationBoard.dtd"  # unused, HTTPS => 503
-    stboard_params = {}
-    stboard_headers = {}
+    __stboard_uri = "https://www.rmv.de/auskunft/bin/jp/stboard.exe/"
+    __stboard_dtd = "http://www.rmv.de/xml/hafasXMLStationBoard.dtd"  # unused, HTTPS => 503
+    __stboard_params = {}
+    __stboard_headers = {}
 
-    stboard_lang = 'd'  # language (d = german, e = english, ...)
-    stboard_type = 'n'  # UNK type
-    stboard_station_suggestions = '?'  # suggestions for ambigious station names (!=no, ?=yes)
+    __stboard_lang = 'd'  # language (d = german, e = english, ...)
+    __stboard_type = 'n'  # UNK type
+    __stboard_station_suggestions = '?'  # suggestions for ambigious station names (!=no, ?=yes)
                                        # breaks RMVs stboard..., not sure why
 
-    tz = 'CET'  # interprate time with this timezone
+    __tz = 'CET'  # interprate time with this timezone
 
     def __init__(self):
         # request params defaults
         #self.stboard_params['L'] = 'vs_rmv.vs_sq'  # Layout (affects web form output)
         #self.stboard_params['L'] = 'vs_java3' # seems to be a generic layout available in every installation
-        self.stboard_params['selectDate'] = 'today'  # Day (yesterday, today)
-        self.stboard_params['time'] = 'actual'  # Time (use 'actual' for now or 'HHMM')
-        self.stboard_params['input'] = '{station}'  # Search Query
-        self.stboard_params['disableEquivs'] = 'yes'  # Don't use nearby stations
-        self.stboard_params['maxJourneys'] = '50'  # Maximal number of results
-        self.stboard_params['boardType'] = 'dep'  # Departure / Arrival
-        self.stboard_params['productsFilter'] = '11111111111'  # Means of Transport (skip or 11111111111 for all)
-        self.stboard_params['maxStops'] = 10  # UNK
-        self.stboard_params['rt'] = 1  # Enable Realtime-Data
-        self.stboard_params['start'] = 'yes'  # Start Query or Webform
+        self.__stboard_params['selectDate'] = 'today'  # Day (yesterday, today)
+        self.__stboard_params['time'] = 'actual'  # Time (use 'actual' for now or 'HHMM')
+        self.__stboard_params['input'] = '{station}'  # Search Query
+        self.__stboard_params['disableEquivs'] = 'yes'  # Don't use nearby stations
+        self.__stboard_params['maxJourneys'] = '50'  # Maximal number of results
+        self.__stboard_params['boardType'] = 'dep'  # Departure / Arrival
+        self.__stboard_params['productsFilter'] = '11111111111'  # Means of Transport (skip or 11111111111 for all)
+        self.__stboard_params['maxStops'] = 10  # UNK
+        self.__stboard_params['rt'] = 1  # Enable Realtime-Data
+        self.__stboard_params['start'] = 'yes'  # Start Query or Webform
         # UNUSED / UNTESTED AT THIS POINT
         # inputTripelId (sic!)  Direct Reference to a Station as returned by the undocumented station search
         # inputRef              Refer to station by <stationName>#<externalId>
-        self.stboard_params['output'] = 'xml'  # Output Format (auto fallback to some html website)
+        self.__stboard_params['output'] = 'xml'  # Output Format (auto fallback to some html website)
 
         # http headers to send with each request
-        self.stboard_headers['Host'] = 'www.rmv.de'
-        self.stboard_headers['User-Agent'] = 'Mozilla/5.0 (X11; Linux x86_64; rv:27.0) Gecko/20100101 Firefox/27.0'
+        self.__stboard_headers['Host'] = 'www.rmv.de'
+        self.__stboard_headers['User-Agent'] = 'Mozilla/5.0 (X11; Linux x86_64; rv:27.0) Gecko/20100101 Firefox/27.0'
 
     @staticmethod
     def __handle_station(leaf):
@@ -67,7 +67,7 @@ class HAFASProvider:
         for time_attr in list(leaf):
             if time_attr.tag == 'Time':
                 # time is formatted as HH:MM
-                parseable_datetime = '{date} {time} {tz}'.format(date=start_date, time=time_attr.text, tz=HAFASProvider.tz)
+                parseable_datetime = '{date} {time} {tz}'.format(date=start_date, time=time_attr.text, tz=HAFASProvider.__tz)
                 timestamp = int(calendar.timegm(time.strptime(parseable_datetime, '%Y%m%d %H:%M %Z')))
 
                 # if HH of the startT element is larger than the current element we
@@ -93,10 +93,8 @@ class HAFASProvider:
         for attr in leaf:  # BasicStop Attributes
             if attr.tag == 'Location':
                 # parse location information
-                x = attr.get('x')
-                lon = float('{int}.{frac}'.format(int=x[:2], frac=x[2:])) if len(x) == 8 else float('{int}.{frac}'.format(int=x[:1], frac=x[1:]))
-                y = attr.get('y')
-                lat = float('{int}.{frac}'.format(int=y[:2], frac=y[2:])) if len(y) == 8 else float('{int}.{frac}'.format(int=y[:1], frac=y[1:]))
+                lon = int(attr.get('x')) / 1000000
+                lat = int(attr.get('y')) / 1000000
                 type = attr.get('type')
 
                 # get generic station information
@@ -121,7 +119,7 @@ class HAFASProvider:
         returns a tuple with (station_info, connections)
         '''
         # copy default params and update with function params
-        params = copy.deepcopy(self.stboard_params)
+        params = copy.deepcopy(self.__stboard_params)
         params['input'] = station
         params['time'] = when
         params['disableEquivs'] = discard_nearby
@@ -131,8 +129,8 @@ class HAFASProvider:
         qp = urllib.parse.urlencode(params)
 
         # request
-        req_uri = "{base_uri}{lang}{type}{suggestions}{query_params}".format(base_uri=self.stboard_uri, \
-            lang=self.stboard_lang, type=self.stboard_type, suggestions=self.stboard_station_suggestions, \
+        req_uri = "{base_uri}{lang}{type}{suggestions}{query_params}".format(base_uri=self.__stboard_uri, \
+            lang=self.__stboard_lang, type=self.__stboard_type, suggestions=self.__stboard_station_suggestions, \
             query_params=qp)
         print(req_uri)
         req = urllib.request.Request(req_uri)
@@ -229,5 +227,5 @@ class HAFASProvider:
         return origin_station_info, connections
 
     def __add_http_headers(self, request):
-        for header, value in self.stboard_headers.items():
+        for header, value in self.__stboard_headers.items():
             request.add_header(header, value)
