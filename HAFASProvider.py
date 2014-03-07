@@ -8,40 +8,29 @@ from lxml import etree
 
 
 class HAFASProvider:
-    __stboard_uri = "https://www.rmv.de/auskunft/bin/jp/stboard.exe/"
-    __stboard_dtd = "http://www.rmv.de/xml/hafasXMLStationBoard.dtd"  # unused, HTTPS => 503
-    __stboard_params = {}
-    __stboard_headers = {}
+    __base_uri = 'https://www.rmv.de/auskunft/bin/jp/'
 
-    __stboard_lang = 'd'  # language (d = german, e = english, ...)
-    __stboard_type = 'n'  # UNK type
-    __stboard_station_suggestions = '?'  # suggestions for ambigious station names (!=no, ?=yes)
-                                       # breaks RMVs stboard..., not sure why
+    __query_path = 'query.exe/'
+    __getstop_path = 'ajax-getstop.exe/'
+    __stboard_path = 'stboard.exe/'  # DTD http://www.rmv.de/xml/hafasXMLStationBoard.dtd
+
+    __lang = 'd'
+    __type = 'n'
+    __with_suggestions = '?'  # ? = yes, ! = no
+
+    __http_headers = {}
 
     __tz = 'CET'  # interprate time with this timezone
 
     def __init__(self):
-        # request params defaults
-        #self.stboard_params['L'] = 'vs_rmv.vs_sq'  # Layout (affects web form output)
-        #self.stboard_params['L'] = 'vs_java3' # seems to be a generic layout available in every installation
-        self.__stboard_params['selectDate'] = 'today'  # Day (yesterday, today)
-        self.__stboard_params['time'] = 'actual'  # Time (use 'actual' for now or 'HHMM')
-        self.__stboard_params['input'] = '{station}'  # Search Query
-        self.__stboard_params['disableEquivs'] = 'yes'  # Don't use nearby stations
-        self.__stboard_params['maxJourneys'] = '50'  # Maximal number of results
-        self.__stboard_params['boardType'] = 'dep'  # Departure / Arrival
-        self.__stboard_params['productsFilter'] = '11111111111'  # Means of Transport (skip or 11111111111 for all)
-        self.__stboard_params['maxStops'] = 10  # UNK
-        self.__stboard_params['rt'] = 1  # Enable Realtime-Data
-        self.__stboard_params['start'] = 'yes'  # Start Query or Webform
-        # UNUSED / UNTESTED AT THIS POINT
-        # inputTripelId (sic!)  Direct Reference to a Station as returned by the undocumented station search
-        # inputRef              Refer to station by <stationName>#<externalId>
-        self.__stboard_params['output'] = 'xml'  # Output Format (auto fallback to some html website)
-
         # http headers to send with each request
-        self.__stboard_headers['Host'] = 'www.rmv.de'
-        self.__stboard_headers['User-Agent'] = 'Mozilla/5.0 (X11; Linux x86_64; rv:27.0) Gecko/20100101 Firefox/27.0'
+
+        # parse base url for Host-Header
+        url = urllib.parse.urlparse(self.__base_uri)
+        self.__http_headers['Host'] = url.netloc
+
+        # disguise as a browser
+        self.__http_headers['User-Agent'] = 'Mozilla/5.0 (X11; Linux x86_64; rv:27.0) Gecko/20100101 Firefox/27.0'
 
     @staticmethod
     def __handle_station(leaf):
@@ -113,25 +102,37 @@ class HAFASProvider:
         return index, stop
 
 
-    def get_stboard(self, station, when='actual', discard_nearby='yes', max_results='50', products='11111111111',
+    def get_stboard(self, query, when='actual', discard_nearby='yes', max_results='50', products='11111111111',
                     type='dep'):
         '''
         returns a tuple with (station_info, connections)
         '''
-        # copy default params and update with function params
-        params = copy.deepcopy(self.__stboard_params)
-        params['input'] = station
-        params['time'] = when
-        params['disableEquivs'] = discard_nearby
-        params['maxJourneys'] = max_results
-        params['productsFilter'] = products
-        params['boardType'] = type
-        qp = urllib.parse.urlencode(params)
+
+        # request params defaults
+        query_param = {}
+        #query_param['L'] = 'vs_rmv.vs_sq'  # Layout (affects web form output)
+        #query_param['L'] = 'vs_java3' # seems to be a generic layout available in every installation
+        query_param['selectDate'] = 'today'  # Day (yesterday, today)
+        query_param['time'] = when # Time (use 'actual' for now or 'HHMM')
+        query_param['input'] = query  # Search Query (can be a String or Integer (ExternalId))
+        query_param['disableEquivs'] = discard_nearby # Don't use nearby stations
+        query_param['maxJourneys'] = max_results # Maximal number of results
+        query_param['boardType'] = type # Departure / Arrival
+        query_param['productsFilter'] = products # Means of Transport (skip or 11111111111 for all)
+        query_param['maxStops'] = 10  # max amount of intermediate stops for each connection
+        query_param['rt'] = 1  # Enable Realtime-Data
+        query_param['start'] = 'yes'  # Start Query or Webform
+        # UNUSED / UNTESTED AT THIS POINT
+        # inputTripelId (sic!)  Direct Reference to a Station as returned by the undocumented station search
+        # inputRef              Refer to station by <stationName>#<externalId>
+        query_param['output'] = 'xml'  # Output Format (auto fallback to some html website)
+
+        qp = urllib.parse.urlencode(query_param)
 
         # request
-        req_uri = "{base_uri}{lang}{type}{suggestions}{query_params}".format(base_uri=self.__stboard_uri, \
-            lang=self.__stboard_lang, type=self.__stboard_type, suggestions=self.__stboard_station_suggestions, \
-            query_params=qp)
+        req_uri = "{base_uri}{binary_path}{lang}{type}{suggestions}{query_params}".format(base_uri=self.__base_uri, \
+            lang=self.__lang, type=self.__type, suggestions=self.__with_suggestions, \
+            query_params=qp, binary_path=self.__stboard_path)
         print(req_uri)
         req = urllib.request.Request(req_uri)
         self.__add_http_headers(req)
@@ -227,5 +228,5 @@ class HAFASProvider:
         return origin_station_info, connections
 
     def __add_http_headers(self, request):
-        for header, value in self.__stboard_headers.items():
+        for header, value in self.__http_headers.items():
             request.add_header(header, value)
