@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+import json
 import urllib.request
 import urllib.parse
 import time
@@ -230,3 +231,42 @@ class HAFASProvider:
     def __add_http_headers(self, request):
         for header, value in self.__http_headers.items():
             request.add_header(header, value)
+
+    def get_nearby_stations(self, x, y):
+        # x = lon / 1000, y = lat / 1000
+
+        # parameters
+        params = {}
+        params['performLocating'] = 2
+        params['tpl'] = 'stop2json'
+        params['look_maxno'] = 10
+        params['look_maxdist'] = 50000
+        params['look_nv'] = 'get_stopweight|yes'
+        params['look_x'] = x
+        params['look_y'] = y
+        qp = urllib.parse.urlencode(params)
+
+        # request
+        req_uri = "{base_uri}{binary_path}{lang}{type}y{suggestions}{query_params}".format(base_uri=self.__base_uri, \
+            lang=self.__lang, type=self.__type, suggestions=self.__with_suggestions, \
+            query_params=qp, binary_path=self.__query_path)
+        print(req_uri)
+        req = urllib.request.Request(req_uri)
+        self.__add_http_headers(req)
+        res = urllib.request.urlopen(req)
+        data = res.read()
+        data = data.decode('utf-8')
+
+        root = json.loads(data)
+        stops = []
+        for stop in root['stops']:
+            stops.append({'name': stop['name'],
+                          'external_id': stop['extId'],
+                          'pooluic': stop['puic'],
+                          'lat': int(stop['y']) / 1000,
+                          'lon': int(stop['x']) / 1000,
+                          'dist': stop['dist'],
+                          'weight': stop['stopweight'],
+                          'products': stop['prodclass']})
+
+        return stops
