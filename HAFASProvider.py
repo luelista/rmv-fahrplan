@@ -305,14 +305,13 @@ class HAFASProvider:
             try:
                 stops.append({'name': stop['value'],
                               'external_id': stop['extId'],
-                              'lat': int(stop['ycoord']) / 1000,
-                              'lon': int(stop['xcoord']) / 1000,
+                              'lat': int(stop['ycoord']) / 1000 if stop['ycoord'].isdigit() else None,
+                              'lon': int(stop['xcoord']) / 1000 if stop['xcoord'].isdigit() else None,
                               'weight': int(stop['weight']),
                               'products': stop['prodClass'],
                               'type': stop['type']})
-            except KeyError:
-                print("KeyError in get_autocomplete_location")
-                print(stop)
+            except KeyError as e:
+                print("Caught KeyError in get_autocomplete_location: {}".format(e))
 
         return sorted(stops, key = lambda stop: stop['weight'], reverse=True)
 
