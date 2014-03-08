@@ -151,7 +151,10 @@ class HAFASProvider:
 
         # station that hafas selected
         origin_station = list(root.find("SBRes/SBReq/Start/Station"))
-        origin_station_info = self.__handle_station(origin_station)
+        try:
+            origin_station_info = self.__handle_station(origin_station)
+        except TypeError:
+            raise StationNotFoundException
 
         connections = []
         for journey in root.findall('SBRes/JourneyList/Journey'):  # Journey
@@ -234,7 +237,7 @@ class HAFASProvider:
         for header, value in self.__http_headers.items():
             request.add_header(header, value)
 
-    def get_nearby_stations(self, x, y):
+    def get_nearby_stations(self, x, y, max=25, dist=5000):
         # x = lon / 1000000, y = lat / 10000000
         #print("X: {} Y: {}".format(x, y))
 
@@ -242,8 +245,8 @@ class HAFASProvider:
         query_param = {}
         query_param['performLocating'] = 2
         query_param['tpl'] = 'stop2json'
-        query_param['look_maxno'] = 25
-        query_param['look_maxdist'] = 50000
+        query_param['look_maxno'] = max
+        query_param['look_maxdist'] = dist
         query_param['look_nv'] = 'get_stopweight|yes'
         query_param['look_x'] = x
         query_param['look_y'] = y
@@ -274,11 +277,11 @@ class HAFASProvider:
 
         return stops
 
-    def get_autocomplete_locations(self, query):
+    def get_autocomplete_locations(self, query, max=25):
         # parameters
         query_param = {}
         query_param['getstop'] = 1
-        query_param['REQ0JourneyStopsS0A'] = 255
+        query_param['REQ0JourneyStopsS0A'] = max
         query_param['REQ0JourneyStopsS0G'] = query
         qp = urllib.parse.urlencode(query_param)
 
@@ -299,12 +302,23 @@ class HAFASProvider:
 
         stops = []
         for stop in root['suggestions']:
-            stops.append({'name': stop['value'],
-                          'external_id': stop['extId'],
-                          'lat': int(stop['ycoord']) / 1000,
-                          'lon': int(stop['xcoord']) / 1000,
-                          'weight': int(stop['weight']),
-                          'products': stop['prodClass'],
-                          'type': stop['type']})
+            try:
+                stops.append({'name': stop['value'],
+                              'external_id': stop['extId'],
+                              'lat': int(stop['ycoord']) / 1000,
+                              'lon': int(stop['xcoord']) / 1000,
+                              'weight': int(stop['weight']),
+                              'products': stop['prodClass'],
+                              'type': stop['type']})
+            except KeyError:
+                print("KeyError in get_autocomplete_location")
+                print(stop)
 
         return sorted(stops, key = lambda stop: stop['weight'], reverse=True)
+
+
+class HAFASException(Exception):
+    pass
+
+class StationNotFoundException(HAFASException):
+    pass
