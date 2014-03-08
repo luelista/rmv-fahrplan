@@ -38,8 +38,8 @@ class HAFASProvider:
         info = {}
         for element in leaf:
             if element.tag == 'ExternalId':
-                info['external_id'] = element.text
-                info['pooluic'] = element.get('pooluic')
+                info['external_id'] = int(element.text)
+                info['pooluic'] = int(element.get('pooluic'))
             elif element.tag == 'HafasName':
                 text_elem = element.find('Text')
                 info['name'] = text_elem.text
@@ -83,8 +83,10 @@ class HAFASProvider:
         for attr in leaf:  # BasicStop Attributes
             if attr.tag == 'Location':
                 # parse location information
-                lon = int(attr.get('x')) / 1000000
-                lat = int(attr.get('y')) / 1000000
+                x = int(attr.get('x'))
+                y = int(attr.get('y'))
+                lon = x / 1000000
+                lat = y / 1000000
                 type = attr.get('type')
 
                 # get generic station information
@@ -92,7 +94,7 @@ class HAFASProvider:
                     stop = HAFASProvider.__handle_station(st)
 
                     # append location data to station_info
-                    location = {'lat': lat, 'lon': lon, 'type': type}
+                    location = {'lat': lat, 'lon': lon, 'x': x, 'y': y, 'type': type}
                     stop['location'] = location
 
             elif attr.tag == 'Dep' or attr.tag == 'Arr':
@@ -233,18 +235,19 @@ class HAFASProvider:
             request.add_header(header, value)
 
     def get_nearby_stations(self, x, y):
-        # x = lon / 1000, y = lat / 1000
+        # x = lon / 1000000, y = lat / 10000000
+        #print("X: {} Y: {}".format(x, y))
 
         # parameters
-        params = {}
-        params['performLocating'] = 2
-        params['tpl'] = 'stop2json'
-        params['look_maxno'] = 10
-        params['look_maxdist'] = 50000
-        params['look_nv'] = 'get_stopweight|yes'
-        params['look_x'] = x
-        params['look_y'] = y
-        qp = urllib.parse.urlencode(params)
+        query_param = {}
+        query_param['performLocating'] = 2
+        query_param['tpl'] = 'stop2json'
+        query_param['look_maxno'] = 25
+        query_param['look_maxdist'] = 50000
+        query_param['look_nv'] = 'get_stopweight|yes'
+        query_param['look_x'] = x
+        query_param['look_y'] = y
+        qp = urllib.parse.urlencode(query_param)
 
         # request
         req_uri = "{base_uri}{binary_path}{lang}{type}y{suggestions}{query_params}".format(base_uri=self.__base_uri, \
@@ -261,12 +264,47 @@ class HAFASProvider:
         stops = []
         for stop in root['stops']:
             stops.append({'name': stop['name'],
-                          'external_id': stop['extId'],
-                          'pooluic': stop['puic'],
-                          'lat': int(stop['y']) / 1000,
-                          'lon': int(stop['x']) / 1000,
-                          'dist': stop['dist'],
-                          'weight': stop['stopweight'],
-                          'products': stop['prodclass']})
+                          'external_id': int(stop['extId']),
+                          'pooluic': int(stop['puic']),
+                          'lat': int(stop['y']) / 1000000,
+                          'lon': int(stop['x']) / 1000000,
+                          'dist': int(stop['dist']),
+                          'weight': int(stop['stopweight']),
+                          'products': int(stop['prodclass'])})
 
         return stops
+
+    def get_autocomplete_locations(self, query):
+        # parameters
+        query_param = {}
+        query_param['getstop'] = 1
+        query_param['REQ0JourneyStopsS0A'] = 255
+        query_param['REQ0JourneyStopsS0G'] = query
+        qp = urllib.parse.urlencode(query_param)
+
+        # request
+        req_uri = "{base_uri}{binary_path}{lang}{type}{suggestions}{query_params}".format(base_uri=self.__base_uri, \
+            lang=self.__lang, type=self.__type, suggestions=self.__with_suggestions, \
+            query_params=qp, binary_path=self.__getstop_path)
+        print(req_uri)
+        req = urllib.request.Request(req_uri)
+        self.__add_http_headers(req)
+        res = urllib.request.urlopen(req)
+        data = res.read()
+        data = data.decode('utf-8')
+
+        begin = data.find('{')
+        end = data.rfind('}')
+        root = json.loads(data[begin:end+1])
+
+        stops = []
+        for stop in root['suggestions']:
+            stops.append({'name': stop['value'],
+                          'external_id': stop['extId'],
+                          'lat': int(stop['ycoord']) / 1000,
+                          'lon': int(stop['xcoord']) / 1000,
+                          'weight': int(stop['weight']),
+                          'products': stop['prodClass'],
+                          'type': stop['type']})
+
+        return sorted(stops, key = lambda stop: stop['weight'], reverse=True)
