@@ -1,0 +1,76 @@
+<!doctype html>
+<html>
+
+    <head>
+        <meta charset="utf8">
+        <script src="https://static.luelistan.net/jquery/jquery-2.1.3.min.js"></script>
+        <link rel="stylesheet" href="https://static.luelistan.net/bootstrap/css/bootstrap.min.css">
+        <meta name="viewport" content="width=500" />
+        <style>
+        .white {color:white!important; }
+         .footer { border-top: 1px solid #ddd; padding: 20px ; color: #555; }
+        </style>
+    </head>
+    <body>
+
+        <div class="navbar navbar-inverse navbar-static-top">
+            <div class="navbar-inner">
+            <span class="brand" id="title">Eile mit Weile</span>
+            <span class="white pull-right brand" style="float:right!important" id="clock"></span>
+        </div></div>
+        
+        <table class="table">
+            <thead>
+                <th>Abfahrt</th><th>Verspätung</th><th>Linie</th><th>Ziel</th>
+            </thead>
+            <tbody id="content">
+            </tbody>
+        </table>
+
+
+        <script>
+         function updateData() {
+             var fn = "willy";
+             if (location.search) fn = location.search.substr(1).replace(/[^a-z]/g,'');
+             $.get("/"+fn+".json", function(dataList) {
+
+                 $("#title").html("Abfahrten von <span class=white>"+dataList.info.name+"</span>");
+                 
+                 var tab = $("#content");
+                 tab.html('');
+
+                 for(var i in dataList.connections) {
+                     var d = dataList.connections[i];
+                     var delayed = "";
+                     if (d.delay > 0) delayed = "<span style='color:red'>+" + d.delay/60 + " min</span>";
+                     tab.append("<tr><td>" + d.time + "</td><td>" + delayed + "</td><td>" + d.name.normal + "</td><td>" + d.direction.normal + "</td></tr>");
+                 }
+                 
+                 
+             });
+         }
+         updateData();
+         setInterval(updateData, 60000);
+         function fmt(n){ return n<10?"0"+n:n; }
+         setInterval(function() {
+             var d = new Date();
+             $("#clock").html(fmt(d.getHours()) + ":" + fmt(d.getMinutes()) + ":" + fmt(d.getSeconds()));
+         }, 1000);
+        </script>
+
+<div class="footer">
+
+    
+    Zur Zeit verfügbare Haltestellen: <a href="?willy">DA Willy-Brandt-Platz</a> | <a href="?schloss">DA Schloß</a> | <a href="?rns">DA Rhein-/Neckarstraße</a><br><br>
+
+    Einmal pro Minute aktualisierte Daten zur Weiterverwendung:<br>
+     <code>https://fahrplan.max-weller.de/&lt;id&gt;.json</code>
+    
+<br><br>
+    <p class=muted>Daten vom RMV, Python Back-end by hexa, Javascript Front-end by Max Weller</p>
+    
+</div>
+        
+    </body>
+</html>
+        
