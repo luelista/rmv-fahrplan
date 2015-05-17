@@ -57,13 +57,14 @@ class HAFASProvider:
         for time_attr in list(leaf):
             if time_attr.tag == 'Time':
                 # time is formatted as HH:MM
-                parseable_datetime = '{date} {time} {tz}'.format(date=start_date, time=time_attr.text, tz=HAFASProvider.__tz)
-                timestamp = int(calendar.timegm(time.strptime(parseable_datetime, '%Y%m%d %H:%M %Z')))
+                timestamp = time_attr.text
+                #parseable_datetime = '{date} {time} {tz}'.format(date=start_date, time=time_attr.text, tz=HAFASProvider.__tz)
+                #timestamp = int(calendar.timegm(time.strptime(parseable_datetime, '%Y%m%d %H:%M %Z')))
 
                 # if HH of the startT element is larger than the current element we
                 # experienced a daychange, add 60*60*24=86400 to timestamp
-                if int(time_attr.text[:2]) < int(start_time[:2]):
-                    timestamp += 86400
+                #if int(time_attr.text[:2]) < int(start_time[:2]):
+                #    timestamp += 86400
             elif time_attr.tag == 'Delay':
                 # convert delay to seconds, for easier calculations with unix timestamps
                 delay = 60 * int(time_attr.text)
@@ -136,7 +137,7 @@ class HAFASProvider:
         req_uri = "{base_uri}{binary_path}{lang}{type}{suggestions}{query_params}".format(base_uri=self.__base_uri, \
             lang=self.__lang, type=self.__type, suggestions=self.__with_suggestions, \
             query_params=qp, binary_path=self.__stboard_path)
-        print(req_uri)
+        #print(req_uri)
         req = urllib.request.Request(req_uri)
         self.__add_http_headers(req)
         res = urllib.request.urlopen(req)
@@ -321,3 +322,4 @@ class HAFASException(Exception):
 
 class StationNotFoundException(HAFASException):
     pass
+
